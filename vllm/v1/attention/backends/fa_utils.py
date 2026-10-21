@@ -102,6 +102,9 @@ def get_flash_attn_version(
         elif device_capability.major == 10 and is_fa_version_supported(4):
             # Blackwell (SM100+, restrict to SM100 for now): prefer FA4
             fa_version = 4
+        elif device_capability.major == 8 and is_fa_version_supported(3):
+            # Ampere/Ada with an opted-in Sm8x FA3 build
+            fa_version = 3
         else:
             # Fallback to FA2
             fa_version = 2
@@ -123,6 +126,21 @@ def get_flash_attn_version(
                 "defaulting to FA version 4 if supported, otherwise FA2."
             )
             fa_version = 4 if is_fa_version_supported(4) else 2
+
+        if device_capability.major == 8 and fa_version == 3:
+            sm8x_reason = None
+            if head_size is not None and head_size > 256:
+                sm8x_reason = f"head_size={head_size}"
+            elif has_sinks:
+                sm8x_reason = "attention sinks"
+            elif head_size_v is not None and head_size_v != head_size:
+                sm8x_reason = "head_size != head_size_v"
+            if sm8x_reason is not None:
+                logger.warning_once(
+                    "FA3 Sm8x kernels do not support %s, defaulting to FA version 2.",
+                    sm8x_reason,
+                )
+                fa_version = 2
 
         if requires_alibi and fa_version == 3:
             logger.warning_once(
@@ -319,7 +337,11 @@ def flash_attn_supports_quant_query_input() -> bool:
 def flash_attn_supports_sinks() -> bool:
     if current_platform.is_xpu():
         return True
-    return get_flash_attn_version() in (3, 4)
+    fa_version = get_flash_attn_version()
+    if fa_version == 3:
+        # The FA3 Sm8x kernels have no S_aux (sinks) support.
+        return current_platform.is_device_capability_family(90)
+    return fa_version == 4
 
 
 def flash_attn_supports_mla():

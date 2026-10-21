@@ -64,9 +64,26 @@ def _is_fa3_supported() -> tuple[bool, str | None]:
         return False, f"FA3 is unavailable due to: {FA3_UNAVAILABLE_REASON}"
     from vllm.platforms import current_platform
 
-    if not current_platform.is_device_capability_family(90):
-        return False, "FA3 is only supported on devices with compute capability 9.x"
-    return True, None
+    if current_platform.is_device_capability_family(90):
+        return True, None
+    if is_fa3_sm8x_enabled():
+        return True, None
+    return False, (
+        "FA3 is only supported on devices with compute capability 9.x "
+        "(or 8.x with VLLM_FLASH_ATTN_FA3_SM8X=1 and an Sm8x FA3 build)"
+    )
+
+
+def is_fa3_sm8x_enabled() -> bool:
+    """FA3 Sm8x kernels are opted in via VLLM_FLASH_ATTN_FA3_SM8X on SM 8.x."""
+    import vllm.envs as envs
+    from vllm.platforms import current_platform
+
+    return (
+        envs.VLLM_FLASH_ATTN_FA3_SM8X
+        and current_platform.has_device_capability(80)
+        and not current_platform.has_device_capability(90)
+    )
 
 
 def _is_fa4_supported() -> tuple[bool, str | None]:

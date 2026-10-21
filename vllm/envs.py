@@ -62,6 +62,7 @@ if TYPE_CHECKING:
     VLLM_SPARSE_INDEXER_MAX_LOGITS_MB: int = 512
     VLLM_ADAPTIVE_VERIFICATION_PROFILE_CONTEXT_LEN: int = 8192
     VLLM_XPU_PP_MICROBATCH: bool = True
+    VLLM_FLASH_ATTN_FA3_SM8X: bool = False
     VLLM_DISTRIBUTED_USE_SPLIT_GROUP: bool = False
     VLLM_XLA_USE_SPMD: bool = False
     VLLM_WORKER_MULTIPROC_METHOD: Literal["fork", "spawn"] = "fork"
@@ -615,6 +616,13 @@ def _resolve_rust_cli_path() -> str | None:
 
 
 environment_variables: dict[str, Callable[[], Any]] = {
+    # Opt in to FA3 on SM 8.x (Ampere/Ada). Disabled by default; requires
+    # _vllm_fa3_C built with flash-attention -DFA3_ENABLE_SM8X=ON.
+    # Gemma 4 uses FA3 for sliding-window layers in --language-model-only
+    # mode; full-attention layers stay on Triton.
+    "VLLM_FLASH_ATTN_FA3_SM8X": lambda: bool(
+        int(os.getenv("VLLM_FLASH_ATTN_FA3_SM8X", "0"))
+    ),
     # ================== Installation Time Env Vars ==================
     # Target device of vLLM, supporting [cuda (by default),
     # rocm, cpu]
