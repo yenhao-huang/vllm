@@ -254,6 +254,46 @@ class Gemma4Config(VerifyAndUpdateConfig):
                 "%s. FA4 not available, forcing TRITON_ATTN backend.",
                 head_dims,
             )
+            Gemma4Config._maybe_use_fa3_sm8x_for_sliding(vllm_config, head_dims)
+
+    @staticmethod
+    def _maybe_use_fa3_sm8x_for_sliding(
+        vllm_config: "VllmConfig", head_dims: dict[str, int]
+    ) -> None:
+        """On SM 8.x with an opted-in FA3 Sm8x build, run the sliding-window
+        layers (head_dim <= 256) on FA3 while full-attention layers
+        (head_dim 512) stay on Triton."""
+        from vllm.v1.attention.backends.registry import AttentionBackendEnum
+        from vllm.vllm_flash_attn.flash_attn_interface import (
+            is_fa3_sm8x_enabled,
+            is_fa_version_supported,
+        )
+
+        attention_config = vllm_config.attention_config
+        sliding_kind = "sliding_window"
+        if not (is_fa3_sm8x_enabled() and is_fa_version_supported(3)):
+            return
+        if sliding_kind in attention_config.backend_per_kind:
+            return
+        if head_dims.get("sliding_attention", 0) > 256:
+            return
+        if attention_config.flash_attn_version not in (None, 3):
+            return
+        if vllm_config.model_config.is_mm_prefix_lm:
+            logger.warning(
+                "VLLM_FLASH_ATTN_FA3_SM8X is set but Gemma4 multimodal "
+                "bidirectional attention needs TRITON_ATTN; pass "
+                "--language-model-only to run sliding-window layers on FA3."
+            )
+            return
+        attention_config.backend_per_kind[sliding_kind] = (
+            AttentionBackendEnum.FLASH_ATTN
+        )
+        attention_config.flash_attn_version = 3
+        logger.info(
+            "Gemma4: using FA3 (Sm8x) for sliding-window layers and "
+            "TRITON_ATTN for full-attention layers."
+        )
 
 
 class DiffusionGemmaModelForBlockDiffusionConfig(VerifyAndUpdateConfig):
