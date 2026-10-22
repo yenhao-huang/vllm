@@ -62,6 +62,7 @@ if TYPE_CHECKING:
     VLLM_USE_RAY_COMPILED_DAG_CHANNEL_TYPE: Literal["auto", "nccl", "shm"] = "auto"
     VLLM_USE_RAY_COMPILED_DAG_OVERLAP_COMM: bool = False
     VLLM_USE_RAY_WRAPPED_PP_COMM: bool = True
+    VLLM_FLASH_ATTN_FA3_SM8X: bool = False
     VLLM_USE_RAY_V2_EXECUTOR_BACKEND: bool = False
     VLLM_DISTRIBUTED_USE_SPLIT_GROUP: bool = False
     VLLM_XLA_USE_SPMD: bool = False
@@ -912,6 +913,11 @@ environment_variables: dict[str, Callable[[], Any]] = {
     # Compiled Graph. Otherwise, it uses Ray's NCCL communicator.
     "VLLM_USE_RAY_WRAPPED_PP_COMM": lambda: bool(
         int(os.getenv("VLLM_USE_RAY_WRAPPED_PP_COMM", "1"))
+    ),
+    # Allow FlashAttention 3 on SM 8.x (Ampere/Ada, e.g. RTX 4090). Requires a
+    # _vllm_fa3_C built with Sm8x kernels (flash-attention -DFA3_ENABLE_SM8X=ON).
+    "VLLM_FLASH_ATTN_FA3_SM8X": lambda: bool(
+        int(os.getenv("VLLM_FLASH_ATTN_FA3_SM8X", "0"))
     ),
     # When True and distributed_executor_backend="ray", use RayExecutorV2
     # (MQ-based) instead of RayDistributedExecutor (compiled-graph backend).
